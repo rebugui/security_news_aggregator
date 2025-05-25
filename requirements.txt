@@ -1,0 +1,9 @@
+# requirements.txt
+selenium
+webdriver-manager
+beautifulsoup4
+markdown2==2.5.3
+google-generativeai
+requests
+schedule
+urllib3
