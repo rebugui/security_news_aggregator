@@ -10,21 +10,21 @@ import schedule
 import os
 
 # 설정 및 모듈 함수 임포트
-from config import GEMINI_API_KEY, NOTION_API_TOKEN, DATABASE_ID, SLACK_WEBHOOK_URL
-from modules.crawlers import boanNews_crawling, dailysecu_crawling, securityNotice_crawling, crawl_ncsc_page
+from config import GEMINI_API_KEY, NOTION_API_TOKEN, BOANISSUE_DATABASE_ID, CVE_DATABASE_ID, SLACK_WEBHOOK_URL
+# generate_weekly_tech_keywords 함수 임포트 추가
+from modules.crawlers import boanNews_crawling, dailysecu_crawling, securityNotice_crawling, crawl_ncsc_page, nvd_cve_crawling, Week_nvd_cve_crawling, generate_weekly_tech_keywords
 from modules.notion_handler import delete_old_entries
 from modules.utils import send_slack_message
 
-def start():
+def start_regular_tasks():
     """
-    정의된 모든 크롤링 작업을 순차적으로 실행하고,
-    오래된 Notion 항목 삭제 작업을 수행합니다.
+    매시간 실행되는 일반 크롤링 작업 및 오래된 항목 삭제 작업을 수행합니다.
     """
     overall_start_time = time.time()
     current_time_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    print(f"[{current_time_str}] 스케쥴링 작업을 시작합니다.")
-    send_slack_message(f"[{current_time_str}] 보안뉴스 크롤링 및 Notion 업데이트 작업을 시작합니다.")
+    print(f"[{current_time_str}] 일반 크롤링 작업을 시작합니다.")
+    send_slack_message(f"[{current_time_str}] 일반 보안뉴스 크롤링 및 Notion 업데이트 작업을 시작합니다.")
 
     crawling_tasks = [
         ("보안뉴스", boanNews_crawling),
@@ -47,42 +47,93 @@ def start():
             send_slack_message(f"[CRITICAL ERROR] {error_msg}")
         time.sleep(1)
 
-    delete_task_start_time = time.time()
+    # 오래된 항목 삭제 작업
+    BOANISSUE_delete_task_start_time = time.time()
     try:
-        print("--- 오래된 항목 삭제 작업 시작 ---")
-        delete_old_entries()
-        delete_task_duration = time.time() - delete_task_start_time
-        print(f"--- 오래된 항목 삭제 작업 완료 (소요 시간: {delete_task_duration:.2f}초) ---")
+        print("--- BOANISSUE 오래된 항목 삭제 작업 시작 ---")
+        delete_old_entries(BOANISSUE_DATABASE_ID)
+        delete_task_duration = time.time() - BOANISSUE_delete_task_start_time
+        print(f"--- BOANISSUE 오래된 항목 삭제 작업 완료 (소요 시간: {delete_task_duration:.2f}초) ---")
     except Exception as e:
-        delete_task_duration = time.time() - delete_task_start_time
+        delete_task_duration = time.time() - BOANISSUE_delete_task_start_time
+        error_msg = f"오래된 항목 삭제 작업 중 오류 발생 (소요 시간: {delete_task_duration:.2f}초): {e}"
+        print(f"[CRITICAL] {error_msg}")
+        send_slack_message(f"[CRITICAL ERROR] {error_msg}")
+
+    CVE_delete_task_start_time = time.time()
+    try:
+        print("--- CVE 오래된 항목 삭제 작업 시작 ---")
+        delete_old_entries(CVE_DATABASE_ID)
+        delete_task_duration = time.time() - CVE_delete_task_start_time
+        print(f"--- CVE 오래된 항목 삭제 작업 완료 (소요 시간: {delete_task_duration:.2f}초) ---")
+    except Exception as e:
+        delete_task_duration = time.time() - CVE_delete_task_start_time
         error_msg = f"오래된 항목 삭제 작업 중 오류 발생 (소요 시간: {delete_task_duration:.2f}초): {e}"
         print(f"[CRITICAL] {error_msg}")
         send_slack_message(f"[CRITICAL ERROR] {error_msg}")
 
     overall_duration = time.time() - overall_start_time
     current_time_str_end = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    completion_message = (f"[{current_time_str_end}] 모든 작업 완료. "
+    completion_message = (f"[{current_time_str_end}] 모든 일반 작업 완료. "
                           f"(총 소요 시간: {overall_duration:.2f}초)")
+    print(completion_message)
+    send_slack_message(completion_message)
+
+def start_weekly_nvd_cve():
+    """
+    일주일에 한 번 실행되는 NVD CVE 크롤링 작업을 수행합니다.
+    """
+    start_time = time.time()
+    current_time_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    print(f"[{current_time_str}] 주간 NVD CVE 크롤링 작업을 시작합니다.")
+    send_slack_message(f"[{current_time_str}] 주간 NVD CVE 크롤링 및 Notion 업데이트 작업을 시작합니다.")
+
+    try:
+        print("--- 주간이슈 시작 ---")
+        generate_weekly_tech_keywords()
+        duration = time.time() - start_time
+        print(f"--- 주간이슈 완료 (소요 시간: {duration:.2f}초) ---")
+
+        print("--- NVD CVE 크롤링 시작 ---")
+        Week_nvd_cve_crawling()
+        duration = time.time() - start_time
+        print(f"--- NVD CVE 크롤링 완료 (소요 시간: {duration:.2f}초) ---")
+
+    except Exception as e:
+        duration = time.time() - start_time
+        error_msg = f"NVD CVE 크롤링 전체 실행 중 오류 발생 (소요 시간: {duration:.2f}초): {e}"
+        print(f"[CRITICAL] {error_msg}")
+        send_slack_message(f"[CRITICAL ERROR] {error_msg}")
+
+    current_time_str_end = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    completion_message = (f"[{current_time_str_end}] 주간 NVD CVE 작업 완료. "
+                          f"(총 소요 시간: {duration:.2f}초)")
     print(completion_message)
     send_slack_message(completion_message)
 
 if __name__ == "__main__":
     # 설정값이 비어 있는지 확인
-    if "YOUR_" in GEMINI_API_KEY or "YOUR_" in NOTION_API_TOKEN or "YOUR_" in DATABASE_ID or "YOUR_" in SLACK_WEBHOOK_URL:
+    if "YOUR_" in GEMINI_API_KEY or "YOUR_" in NOTION_API_TOKEN or "YOUR_" in BOANISSUE_DATABASE_ID or "YOUR_" in CVE_DATABASE_ID or "YOUR_" in SLACK_WEBHOOK_URL:
         print("주의: config.py 파일의 API 키, 토큰, ID, URL 등이 실제 값으로 설정되지 않았습니다.")
         print("스크립트 실행을 중단합니다.")
     else:
         # 프로그램 시작 시 1회 즉시 실행
-        start()
+        start_weekly_nvd_cve()
+
+        start_regular_tasks()
 
         # 환경 변수에 따라 스케줄러 실행 여부 결정
         run_scheduler_env = os.environ.get("RUN_SCHEDULER", "true").lower()
         if run_scheduler_env == "true":
-            schedule.every(1).hours.at(":00").do(start)
+            # 일반 작업은 매시간 정각에 실행
+            schedule.every(1).hours.at(":00").do(start_regular_tasks)
+            # NVD CVE 크롤링은 매주 월요일 오전 9시에 실행
+            schedule.every().monday.at("09:00").do(start_weekly_nvd_cve)
 
             current_time_for_log = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{current_time_for_log}] 스케줄러가 설정되었습니다. 매시간 정각에 작업이 실행됩니다.")
-            send_slack_message(f"[{current_time_for_log}] 스케줄러 시작됨. 매시간 정각 실행 예정.")
+            print(f"[{current_time_for_log}] 스케줄러가 설정되었습니다. 일반 작업은 매시간 정각, NVD CVE는 매주 월요일 09:00에 실행됩니다.")
+            send_slack_message(f"[{current_time_for_log}] 스케줄러 시작됨. 일반 작업은 매시간 정각, NVD CVE는 매주 월요일 09:00에 실행 예정.")
 
             try:
                 while True:
