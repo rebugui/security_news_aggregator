@@ -14,17 +14,17 @@ from selenium.common.exceptions import TimeoutException, NoAlertPresentException
 
 from config import TISTORY_EMAIL, TISTORY_PASSWORD, TISTORY_BLOG_NAME
 
-def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
+def post_to_tistory(title_text, content_text, tags_text, category_name, source_url_text=None):
     print(f"티스토리 자동 포스팅 시작: '{title_text}'")
 
     chrome_options = Options()
     # 화면을 보면서 디버깅합니다.
-    #chrome_options.add_argument("--headless") 
+    chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
-    
+
     driver = None
     posting_successful = False
 
@@ -42,14 +42,14 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
             password_input = driver.find_element(By.NAME, 'password')
             password_input.send_keys(TISTORY_PASSWORD)
             print("이메일 및 비밀번호 입력 완료.")
-            
+
             login_button_selector = "button.btn_g.highlight.submit"
             login_button = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, login_button_selector))
             )
             driver.execute_script("arguments[0].click();", login_button)
             print("1차 카카오 로그인 버튼 클릭 (JavaScript 실행).")
-            
+
         except Exception as e:
             print(f"1차 카카오 로그인 과정 중 오류 발생: {e}")
             driver.save_screenshot("debug_screenshot_kakao_login_error.png")
@@ -75,7 +75,7 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
         # 페이지 타이틀이나 특정 요소가 있는지 확인하여 로드가 완료되었는지 검증할 수 있습니다.
         WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.ID, "kakaoServiceLogo"))) # 예: 관리 페이지 상단 로고
         print(f"   기본 관리 페이지 로드 확인 완료: {driver.current_url}")
-        
+
         print("기본 관리 페이지에서 3초 대기...")
         time.sleep(3)
         # -------------------------------------------------
@@ -89,9 +89,9 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
         alert_handled_successfully = False
         try:
             print("DEBUG: 글쓰기 페이지 진입. 알림창 즉시 확인 및 처리 시도 (최대 7초 대기)...")
-            WebDriverWait(driver, 7).until(EC.alert_is_present()) 
-            
-            alert = driver.switch_to.alert 
+            WebDriverWait(driver, 7).until(EC.alert_is_present())
+
+            alert = driver.switch_to.alert
             alert_text = alert.text
             print(f"DEBUG: 알림 발견! 내용: '{alert_text}'")
 
@@ -99,16 +99,16 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
                 print("DEBUG: '저장된 글' 알림. alert.dismiss()로 '취소'를 시도합니다.")
                 alert.dismiss() # 표준적인 취소 방법
                 print("DEBUG: alert.dismiss() 실행 완료.")
-            else: 
+            else:
                 print(f"WARN: 예상치 못한 다른 알림입니다: '{alert_text}'. '확인' (accept) 처리합니다.")
-                alert.accept() 
-            
+                alert.accept()
+
             alert_handled_successfully = True
             time.sleep(0.5) # DOM 안정화를 위한 짧은 대기
 
-        except TimeoutException: 
+        except TimeoutException:
             print("DEBUG: 알림창이 지정된 시간 내에 나타나지 않았습니다 (정상적인 경우).")
-            alert_handled_successfully = True 
+            alert_handled_successfully = True
         except NoAlertPresentException:
              print("DEBUG: NoAlertPresentException. 알림창 없음 (정상적인 경우).")
              alert_handled_successfully = True
@@ -127,10 +127,10 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
             except Exception as e_double_fault:
                 print(f"   (Fallback) 알림 처리 완전 실패: {e_double_fault}")
                 raise uap_inner # 원래 오류를 다시 발생시켜 중단
-        except Exception as e_alert_handler_other: 
+        except Exception as e_alert_handler_other:
              print(f"ERROR: 알림창 처리 중 예상 못한 오류 발생: {e_alert_handler_other}")
              raise e_alert_handler_other # 더 진행하지 않고 오류 발생
-        
+
         if not alert_handled_successfully: # 이 조건에 걸리면 심각한 문제
             print("CRITICAL: 알림창 처리에 실패했습니다. 스크립트를 중단합니다.")
             # driver.save_screenshot("debug_screenshot_alert_critical_failure.png") # 최종 오류 블록에서 처리
@@ -146,20 +146,20 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
         print("DEBUG: 페이지 기본 요소(body) 로드 대기 중...")
         WebDriverWait(driver, 15).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
         print("   페이지 기본 요소 로드 확인 완료.")
-        time.sleep(1) 
+        time.sleep(1)
 
         print("DEBUG: 글쓰기 페이지 제목 입력창 활성화 대기 중...")
         # title_input_element는 알림 처리 후 다시 가져오는 것이 안전합니다.
-        title_input_element = WebDriverWait(driver, 20).until( 
+        title_input_element = WebDriverWait(driver, 20).until(
             EC.element_to_be_clickable((By.ID, "post-title-inp"))
         )
         print(f"   글쓰기 페이지 제목 입력창 활성화 확인: {driver.current_url}")
-        
+
 
         #1단계: 카테고리 선택
         try:
             # 원하시는 카테고리 이름으로 이 변수 값을 변경하세요.
-            category_name_to_select = "보안이슈"
+            category_name_to_select = category_name
             print(f"카테고리 '{category_name_to_select}' 선택 시도...")
 
             # 카테고리 선택 드롭다운 버튼 클릭
@@ -168,11 +168,11 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
             )
             category_dropdown_button.click()
             print("카테고리 메뉴 열기 완료.")
-            
+
             # [수정] 제공된 HTML 구조에 맞춰 XPath를 수정합니다.
             # role이 'option'인 div 요소 중, 자식 span의 텍스트가 일치하는 것을 찾습니다.
             category_option_xpath = f"//div[@role='option'][span/text()='{category_name_to_select}']"
-            
+
             print(f"카테고리 옵션({category_option_xpath}) 대기 중...")
             category_option = WebDriverWait(driver, 10).until(
                 EC.element_to_be_clickable((By.XPATH, category_option_xpath))
@@ -189,13 +189,13 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
         # 제목 입력
         title_input_element.send_keys("["+tags_text+"]"+title_text)
         print("제목 입력 완료: ", "["+tags_text+"]"+title_text)
-        
+
         time.sleep(1)
-        
+
         try:
             html_content_to_post = content_text
-            
-            if source_url_text: 
+
+            if source_url_text:
                 html_content_to_post += f'<br><p><b>출처:</b> <a href="{source_url_text}" target="_blank" rel="noopener noreferrer">{source_url_text}</a></p>'
 
             # iframe으로 전환
@@ -208,11 +208,11 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
             body_element = WebDriverWait(driver, 10).until(
                 EC.presence_of_element_located((By.ID, "tinymce"))
             )
-            
+
             # 1. JavaScript로 HTML 내용을 먼저 주입합니다.
             driver.execute_script("arguments[0].innerHTML = arguments[1];", body_element, html_content_to_post)
             print("본문 HTML 내용 주입 완료.")
-            
+
             # [핵심 추가] 2. 주입 후, 에디터 본문을 클릭하여 '활성화'하고 '포커스'를 줍니다.
             # 이 과정은 에디터가 변경된 내용을 자신의 '상태'로 인식하게 하는 중요한 역할을 합니다.
             print("에디터 본문 활성화를 위해 클릭 실행...")
@@ -236,7 +236,7 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
         try:
             print("태그 입력 시도...")
             tag_input_element = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.ID, "tagText")) 
+                EC.element_to_be_clickable((By.ID, "tagText"))
             )
             # 이전에 입력된 태그가 있다면 지웁니다. (선택 사항)
             # tag_input_element.clear()
@@ -261,7 +261,7 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
 
             # 2단계: 발행 설정 창이 화면에 완전히 나타날 때까지 대기
             # [수정] 제공해주신 HTML을 분석하여 올바른 CSS 선택자('div.editor_layer')로 변경했습니다.
-            publish_layer_container_selector = "div.editor_layer" 
+            publish_layer_container_selector = "div.editor_layer"
             print(f"발행 설정 창({publish_layer_container_selector})이 나타날 때까지 대기...")
             WebDriverWait(driver, 10).until(
                 EC.visibility_of_element_located((By.CSS_SELECTOR, publish_layer_container_selector))
@@ -286,7 +286,7 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
             )
             final_publish_button.click()
             print("최종 '발행' 버튼 클릭 완료! 🚀")
-            
+
             # 5단계: 발행이 완료되고 글쓰기 페이지를 떠날 때까지 대기
             print("게시글 발행 후 페이지 이동 대기 중 (글 목록 페이지로 이동 예상)...")
             WebDriverWait(driver, 30).until(
@@ -312,7 +312,7 @@ def post_to_tistory(title_text, content_text, tags_text, source_url_text=None):
                 except: pass
                 print(f"  오류 발생 시점 URL: {current_url_on_error}")
                 print(f"  오류 발생 시점 페이지 소스 (일부): {page_source_on_error_snippet}")
-                
+
                 final_error_screenshot_name = "debug_screenshot_fatal_error.png"
                 driver.save_screenshot(final_error_screenshot_name)
                 print(f"함수 실행 중 치명적 오류 발생 시 스크린샷 저장됨: {final_error_screenshot_name}")

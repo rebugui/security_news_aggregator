@@ -43,15 +43,26 @@ def date_re(date_string):
         "%Y.%m.%d",
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%dT%H:%M:%S.%fZ",
+        "%Y-%m-%dT%H:%M:%S.%f",
         "%Y-%m-%dT%H:%M:%S%z",
-        "%Y-%m-%d"
+        "%Y-%m-%d",
     ]
     for fmt in formats_to_try:
         try:
+            # datetime 모듈의 datetime 클래스 사용 (datetime.datetime)
             date_object = datetime.datetime.strptime(date_string.strip(), fmt)
             return date_object.strftime('%Y-%m-%d')
         except ValueError:
             continue
-
+        # strptime이 실패했을 때 fromisoformat으로 추가 시도 (특히 Z나 오프셋 처리)
+        try:
+            if 'T' in date_string and ('Z' in date_string or '+' in date_string[date_string.find('T'):] or '-' in date_string[date_string.find('T'):]):
+                # 'Z'를 +00:00으로 대체하여 fromisoformat이 인식하도록 합니다.
+                iso_date_string = date_string.strip().replace('Z', '+00:00')
+                date_object = datetime.datetime.fromisoformat(iso_date_string)
+                return date_object.strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+        
     print(f"알 수 없는 날짜 형식 또는 변환 실패: '{date_string}'")
     return None
